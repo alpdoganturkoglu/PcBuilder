@@ -13,7 +13,7 @@ from build_pc import build_pc, BuildType, GpuBrand, CpuBrand, StorageType, get_b
 from percentage import Percentage
 from builder import builder
 
-#from graph import 
+from graph import graph_builder
 
 if not os.path.exists("./fonts/OFL.txt"):
     import download_file as df
@@ -51,10 +51,7 @@ class MainWindow(elementBuilder):
         self.button = self.button_builder(
             "BUILD IT", self.width/4, self.height/25)
         self.button.clicked.connect(self.add_pc)
-        self.stats_button=self.button_builder("Get Stats Table",self.width/4,self.height/25)
-        
-        #self.stats_button.clicked.connect(graph_function(self.pcs))
-        
+                
         # Creates purpose and additional layouts
         purpose = self.purpose_layout()
         additional = self.additional()
@@ -78,7 +75,7 @@ class MainWindow(elementBuilder):
         self.layout_main.addLayout(self.percentage_bar(), 5, 1)
         self.layout_main.addWidget(self.percentage_vl, 6, 1)
         self.layout_main.addWidget(additional, 7, 1)
-        self.layout_main.addLayout(self.layout_t, 9, 1)
+        self.layout_main.addLayout(self.layout_t, 10, 1)
 
         #sets central widget as layout
         widget = QWidget()
@@ -178,9 +175,16 @@ class MainWindow(elementBuilder):
         frame = QFrame()
         frame.setMinimumHeight(int(self.height/23))
         frame.setMinimumWidth(int(self.width/1.08))
-        if self.stats_button:
+
+        try:    
             self.layout_t.removeWidget(self.stats_button)
+        except: 
+            pass
+        self.stats_button=self.button_builder("Get Stats Table",self.width/4,self.height/25) 
+        self.stats_button.clicked.connect(self.call_stats)
+        
         self.layout_t.addWidget(self.stats_button)
+
         for pc in pcs:
             temp_vertical = QVBoxLayout()
             horizontal = QHBoxLayout()
@@ -338,7 +342,11 @@ class MainWindow(elementBuilder):
 
     #---------------------------------------------------------------Controllers-------------------------------------------------------------------#
 
+    def call_stats(self):
+        graph_builder(self.pcs)
+
     # Checks all conditions. If conditions meet calls builded_pc function and adds new layout
+    
     def add_pc(self):
         if (self.radioDesktop.isChecked() or self.radioGaming.isChecked() or self.radioWorkstation.isChecked()) and \
                 ((self.pricepicker.text() != "")):
