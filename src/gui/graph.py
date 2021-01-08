@@ -49,6 +49,8 @@ class Graph(QWidget):
         self.layout = QVBoxLayout()        
         self.box1 = QComboBox()
         self.box2 = QComboBox()
+        self.spinbox = QSpinBox()
+        
         self.box2.currentTextChanged.connect(self.pull_bar_graph)
 
         self.bandict = ["URL","Url","Benchmark","_id","Ram Count","Total Price","Please Choose Part","Brand","Model","Socket","Chipset OC","Chipset","Gb","Atx"]
@@ -65,6 +67,12 @@ class Graph(QWidget):
 
         self.layout.addWidget(self.box1)
         self.layout.addWidget(self.box2)
+        self.layout.addWidget(self.spinbox)
+        self.spinbox.setValue(30)
+        self.number = 30
+        self.spinbox.setMinimum(10)
+        self.spinbox.setMaximum(600)
+        self.spinbox.valueChanged.connect(self.valuechange)
 
         self.button = QPushButton('Toggle Sorting Order', self)
         self.layout.addWidget(self.button) 
@@ -77,51 +85,53 @@ class Graph(QWidget):
         self.setLayout(self.layout)
         self.show()
 
+    def valuechange(self):
+         self.number = self.spinbox.value() 
+
     def update_second_box(self):
         self.database = self.box1.currentText()
         text = self.box1.currentText()
         self.box2.clear()
         self.box2.setEnabled(False)
 
-        values = self.pcs
+        value = self.pcs[0]
         tooltip = ""
 
-        for value in values:
-            if text =="MOTHERBOARD":
-                text = "Motherboard"
+        if text =="MOTHERBOARD":
+            text = "Motherboard"
             
-            if not value[text] in self.bandict:
-                for keys in value[text]:
-                    if not keys in self.bandict:
-                        self.box2.addItem(keys)
-                        self.box2.setEnabled(True)
-  
-    def pull_bar_graph(self,text):
-        self.sortindex = text
+        if not value[text] in self.bandict:
+            for keys in value[text]:
+                if not keys in self.bandict:
+                    self.box2.addItem(keys)
+                    self.box2.setEnabled(True)
 
-        if self.sortindex == "":
+    def pull_bar_graph(self,text):
+        self.sort_index = text
+
+        if self.sort_index == "":
             pass
         else:
             self.layout.removeWidget(self.graph)
 
         if self.database == "MOTHERBOARD":
-            self.finderindex = self.motherboard_id
+            self.finder_index = self.motherboard_id
         elif self.database == "RAM":
-            self.finderindex = self.ram_id
+            self.finder_index = self.ram_id
         elif self.database == "GPU":
-            self.finderindex = self.gpu_id
+            self.finder_index = self.gpu_id
         elif self.database == "CPU":
-            self.finderindex = self.cpu_id
+            self.finder_index = self.cpu_id
         elif self.database == "SSD":
-            self.finderindex = self.ssd_id
+            self.finder_index = self.ssd_id
         elif self.database == "HDD":
-            self.finderindex = self.hdd_id
+            self.finder_index = self.hdd_id
 
-        self.graph = self.create_bar_graph(self.database,self.sortindex,self.finderindex, 30, 1)
+        self.graph = self.create_bar_graph(self.database,self.sort_index,self.finder_index, self.number, 1)
         self.layout.addWidget(self.graph)
 
     # Creating a Bar Graph 
-    def create_bar_graph(self,database, sortindex, finderindex, number, sort_number):
+    def create_bar_graph(self,database, sort_index, finder_index, number, sort_number):
         self.plot = pg.PlotWidget()
         self.plot.setStyleSheet("color:black;") 
 
@@ -129,76 +139,125 @@ class Graph(QWidget):
         mydb = myclient["PcBuilder"]
         mycol = mydb[database]
 
-        print(sort_number)
+        finder_value = mycol.find({"_id": finder_index})
 
-        findervalue = mycol.find({"_id": finderindex})
-        if int(findervalue[0]["Rank"]) < 20:
-            itemrank = int(findervalue[0]["Rank"])
-            skipvalue =int(itemrank)
-            values = mycol.find({}, sort=[("Rank",1)]).limit(number)
+        if self.database == "GPU":
+            finder_id_hex = int(str(finder_index),16)
+            first_id_index = mycol.find_one({})
+            first_id_hex = int(str(first_id_index["_id"]),16)
 
-        elif int(findervalue[0]["Rank"])>=20 and int(findervalue[0]["Rank"]) < 60:
-            itemrank = int(findervalue[0]["Rank"])
-            skipvalue =int(itemrank-(number/2))
-            values = mycol.find({}, sort=[("Rank",1)]).limit(number).skip(skipvalue)
+            skip_value = finder_id_hex-first_id_hex-1
+            values = mycol.find({}).limit(number).skip(skip_value)
+            
+        else:    
+            item_rank = int(finder_value[0]["Rank"])
+            skip_value = int(item_rank-(number/2)-1)      
 
-        elif int(findervalue[0]["Rank"])>=60:
-            itemrank = int(findervalue[0]["Rank"])
-            skipvalue = int(itemrank-(number))
-            values = mycol.find({}, sort=[("Rank",1)]).limit(number).skip(skipvalue)
-
+            skip_value = max(min(skip_value, 1000), 0)
+            values = mycol.find({}, sort=[("Rank",1)]).limit(number).skip(skip_value)
+            
         a=0 #for changing colors
         b=1 #counter
 
         color = ['y','w']
 
         label_style = {'color': '#EEE', 'font-size': '14pt'}
-        lbl1 = sortindex
+        lbl1 = sort_index
         self.plot.setLabel("left", lbl1, **label_style)  
-        self.plot.setLabel("bottom", "Sıralama",**label_style)
+        self.plot.setLabel("bottom", "Ranking",**label_style)
 
         if(sort_number == 1):
-            sort_values = sorted(values, key = lambda i: i[sortindex])
+            sort_values = sorted(values, key = lambda i: i[sort_index])
         else: 
-            sort_values = reversed(sorted(values, key = lambda i: i[sortindex]))
+            sort_values = reversed(sorted(values, key = lambda i: i[sort_index]))
 
+        #We used these static code for optimising the graphs loading time more than half
         for value in sort_values:
-
+            y = float(value[sort_index])
             
-            y = float(value[sortindex])  
+            if database == "MOTHERBOARD":
+                if value["_id"] == self.pcs[0]["Motherboard"]["_id"]:
+                    bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush="b")
+                    
+                elif len(self.pcs)==2 and self.pcs[1]["Motherboard"] and value["_id"] == self.pcs[1]["Motherboard"]["_id"]:
+                    bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush="r")
+                    
+                elif len(self.pcs)==3 and self.pcs[2]["Motherboard"] and value["_id"] == self.pcs[2]["Motherboard"]["_id"]:
+                    bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush="g")
+                
+                elif len(self.pcs)==4 and self.pcs[3]["Motherboard"] and value["_id"] == self.pcs[3]["Motherboard"]["_id"]:
+                    bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush="o")
+                    
+                else:
+                    bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush=color[a])
 
-            if value["Rank"] == findervalue[0]["Rank"]:
-                bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush='b')
-                self.plot.addItem(bg) 
-
+                self.plot.addItem(bg)        
+     
             else:
-                bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush=color[a])
-                self.plot.addItem(bg) 
+                if value["_id"] == self.pcs[0][database]["_id"]:
+                    bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush="b")
+                    
+                elif len(self.pcs)==2 and self.pcs[1][database] and value["_id"] == self.pcs[1][database]["_id"]:
+                    bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush="r")
+                    
+                elif len(self.pcs)==3 and self.pcs[2][database] and value["_id"] == self.pcs[2][database]["_id"]:
+                    bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush="g")
+                
+                elif len(self.pcs)==4 and self.pcs[3][database] and value["_id"] == self.pcs[3][database]["_id"]:
+                    bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush="o")
+                    
+                else:
+                    bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush=color[a])
 
+                self.plot.addItem(bg)
+                #Static section ends here    
+
+            #This is the dynamic code for this graph, it takes a while to load the graph with these code
+            """if database == "MOTHERBOARD":
+                for i in range(0,len(self.pcs_title)):
+                    if value["_id"] == self.pcs[i]["Motherboard"]["_id"]:
+                        bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush=colors[i])
+                        self.plot.addItem(bg)
+                        break
+                    else:
+                        bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush=color[a])
+                        self.plot.addItem(bg)
+                    
+            else:
+                for i in range(0,len(self.pcs_title)):
+                    if self.pcs[i][database]:
+                        if value["_id"] == self.pcs[i][database]["_id"]:
+                            bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush=colors[i])
+                            self.plot.addItem(bg)
+                            break
+                        else:
+                            bg = pg.BarGraphItem(x=[b], height=y, width=0.3, brush=color[a])
+                            self.plot.addItem(bg)  """
+            #Dynamic section ends here
+                        
             tooltip = ""
             for key in value:
                 if not key in self.bandict:
                     tooltip += key + ": " + str(value[key]) + "\n"
             bg.setToolTip(tooltip.strip())        
-            self.plot.addItem(bg)  
+            self.plot.addItem(bg) 
+
             if a == 1:
                 if database != "MOTHERBOARD":
                     text = pg.TextItem(text=value["Brand"]+" "+value["Model"] , color=(200, 200, 200),angle=0)
-                    text.setPos(b-0.54,a-1.05)
                     self.plot.addItem(text)
                 else:
                     text = pg.TextItem(text=value["Brand"], color=(200, 200, 200), angle=0)
-                    text.setPos(b-0.54,a-1.05)
                     self.plot.addItem(text)
+                text.setPos(b-0.54,a-1)
             else:
                 if database != "MOTHERBOARD":
                     text = pg.TextItem(text=value["Brand"]+" "+value["Model"] , color=(200, 200, 200),angle=0)
-                    text.setPos(b-0.54,y*1.05)
                     self.plot.addItem(text)
                 else:
                     text = pg.TextItem(text=value["Brand"], color=(200, 200, 200), angle=0)
-                    text.setPos(b-0.54,y*1.05)
                     self.plot.addItem(text)
+                text.setPos(b-0.54,a-1.3)
 
             a += 1
             b += 1
@@ -235,7 +294,3 @@ def graph_builder(pcs):
     window = Graph(pcs, motherboard_id,ram_id,gpu_id,cpu_id,ssd_id,hdd_id)
     window.show()
     app.exec_()
-
-    
-        
-        
